@@ -1,0 +1,13 @@
+# ignore python files
+.ipynb_checkpoints/
+__pycache__/
+
+# ignore pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# ignore saved data
+data/cache/
+# pixi environments
+.pixi/*
+!.pixi/config.toml

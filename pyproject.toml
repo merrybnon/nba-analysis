@@ -1,0 +1,12 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nba_analysis"
+version = "0.1.0"
+description = "Helpers for fetching NBA game logs and plotting scoring distributions"
+requires-python = ">=3.11"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nba_analysis"]

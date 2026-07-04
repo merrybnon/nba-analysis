@@ -1,0 +1,21 @@
+[workspace]
+authors = ["merrybnon <hudsonlazzara@me.com>"]
+channels = ["conda-forge"]
+name = "nba-analysis"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = ">=3.14.6,<3.15"
+pandas = ">=3.0.3,<4"
+pyarrow = ">=24.0.0,<25"
+matplotlib = ">=3.11.0,<4"
+seaborn = ">=0.13.2,<0.14"
+jupyterlab = ">=4.6.1,<5"
+ipykernel = ">=7.3.0,<8"
+
+[pypi-dependencies]
+nba-api = ">=1.11.4, <2"
+nba_analysis = { path = ".", editable = true }
