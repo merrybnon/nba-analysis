@@ -8,6 +8,7 @@ __pycache__/
 
 # ignore saved data
 data/cache/
-# pixi environments
-.pixi/*
-!.pixi/config.toml
+
+# ignore vs code 
+.vscode/
+.env
