@@ -12,7 +12,8 @@ Game logs come from the PlayerGameLogs endpoint rather than the older
 PlayerGameLog. The latter silently returns corrupt results for some players
 -- as of July 2026 it returns a single phantom game for Luka Doncic's 2025-26
 regular season instead of his 64 real ones, with no error raised. PlayerGameLogs
-returns row counts matching the official leaderboard's games played.
+returns row counts matching the official leaderboard's games played, and is
+worth verifying against get_league_leaders(...)['GP'] if a log ever looks short.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import time
 from pathlib import Path
 
 import pandas as pd
-from nba_api.stats.endpoints import playergamelogs
+from nba_api.stats.endpoints import leagueleaders, playergamelogs
 from nba_api.stats.static import players
 
 # src/nba_analysis/data.py -> project root is two parents up from this file's dir
@@ -107,6 +108,46 @@ def get_game_log(
     df = df.sort_values("GAME_DATE").reset_index(drop=True)
     df["SEASON"] = season
     df["SEASON_TYPE"] = season_type
+
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path, index=False)
+    return df
+
+
+def get_league_leaders(
+    season: int | str,
+    stat: str = "PTS",
+    season_type: str = "Regular Season",
+    per_mode: str = "PerGame",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    """Return the league leaders for a stat, ranked, using the local cache.
+
+    NBA.com applies its own qualification rule (a minimum number of games), so
+    low-minute outliers with gaudy per-game rates are already excluded.
+
+    Parameters
+    ----------
+    season : ending year (2026 = the 2025-26 season) or API string '2025-26'
+    stat : stat to rank by, e.g. 'FTA', 'PTS', 'REB'
+    season_type : 'Regular Season' or 'Playoffs'
+    per_mode : 'PerGame' or 'Totals'
+    refresh : force a re-download even if a cached copy exists
+    """
+    season = normalize_season(season)
+    tag = season_type.replace(" ", "")
+    path = CACHE_DIR / f"leaders_{season}_{tag}_{stat}_{per_mode}.parquet"
+
+    if path.exists() and not refresh:
+        return pd.read_parquet(path)
+
+    _throttle()
+    df = leagueleaders.LeagueLeaders(
+        season=season,
+        season_type_all_star=season_type,
+        stat_category_abbreviation=stat,
+        per_mode48=per_mode,
+    ).get_data_frames()[0]
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     df.to_parquet(path, index=False)
