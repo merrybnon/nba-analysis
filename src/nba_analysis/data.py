@@ -7,6 +7,12 @@ for the in-progress season to pick up new games).
 
 Seasons are identified by their ending year: 2025 means the 2024-25
 season. API-native strings like "2024-25" are also accepted as-is.
+
+Game logs come from the PlayerGameLogs endpoint rather than the older
+PlayerGameLog. The latter silently returns corrupt results for some players
+-- as of July 2026 it returns a single phantom game for Luka Doncic's 2025-26
+regular season instead of his 64 real ones, with no error raised. PlayerGameLogs
+returns row counts matching the official leaderboard's games played.
 """
 
 from __future__ import annotations
@@ -15,7 +21,7 @@ import time
 from pathlib import Path
 
 import pandas as pd
-from nba_api.stats.endpoints import playergamelog
+from nba_api.stats.endpoints import playergamelogs
 from nba_api.stats.static import players
 
 # src/nba_analysis/data.py -> project root is two parents up from this file's dir
@@ -90,15 +96,14 @@ def get_game_log(
         return pd.read_parquet(path)
 
     _throttle()
-    log = playergamelog.PlayerGameLog(
-        player_id=player_id,
-        season=season,
-        season_type_all_star=season_type,
-    )
-    df = log.get_data_frames()[0]
+    df = playergamelogs.PlayerGameLogs(
+        player_id_nullable=player_id,
+        season_nullable=season,
+        season_type_nullable=season_type,
+    ).get_data_frames()[0]
 
-    # Tidy up: proper dtypes and chronological order.
-    df["GAME_DATE"] = pd.to_datetime(df["GAME_DATE"], format="%b %d, %Y")
+    # Tidy up: proper dtypes and chronological order. GAME_DATE arrives ISO-8601.
+    df["GAME_DATE"] = pd.to_datetime(df["GAME_DATE"])
     df = df.sort_values("GAME_DATE").reset_index(drop=True)
     df["SEASON"] = season
     df["SEASON_TYPE"] = season_type
