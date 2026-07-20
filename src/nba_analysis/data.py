@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 
 import pandas as pd
-from nba_api.stats.endpoints import leagueleaders, playergamelogs
+from nba_api.stats.endpoints import leaguegamelog, leagueleaders, playergamelogs
 from nba_api.stats.static import players
 
 # src/nba_analysis/data.py -> project root is two parents up from this file's dir
@@ -172,3 +172,80 @@ def get_game_logs(
         for season in seasons
     ]
     return pd.concat(frames, ignore_index=True)
+
+
+def get_league_game_log(
+    season: int | str,
+    season_type: str = "Regular Season",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    """Return every team-game for a whole season, using the local cache.
+
+    This is the league-wide analogue of get_game_log: one row per team per
+    game, so each game appears twice (once from each team's side). The
+    PLUS_MINUS column is that team's final scoring margin, so |PLUS_MINUS|
+    is the game's final point difference. Use get_game_margins for a tidy
+    one-row-per-game margin table.
+
+    Parameters
+    ----------
+    season : ending year (2026 = the 2025-26 season) or API string '2025-26'
+    season_type : 'Regular Season' or 'Playoffs'
+    refresh : force a re-download even if a cached copy exists
+    """
+    season = normalize_season(season)
+    tag = season_type.replace(" ", "")
+    path = CACHE_DIR / f"leaguegames_{season}_{tag}.parquet"
+
+    if path.exists() and not refresh:
+        return pd.read_parquet(path)
+
+    _throttle()
+    df = leaguegamelog.LeagueGameLog(
+        season=season,
+        season_type_all_star=season_type,
+    ).get_data_frames()[0]
+
+    df["GAME_DATE"] = pd.to_datetime(df["GAME_DATE"])
+    df = df.sort_values(["GAME_DATE", "GAME_ID"]).reset_index(drop=True)
+    df["SEASON"] = season
+    df["SEASON_TYPE"] = season_type
+
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path, index=False)
+    return df
+
+
+def get_game_margins(
+    seasons: int | str | list[int | str],
+    season_type: str = "Regular Season",
+    refresh: bool = False,
+) -> pd.DataFrame:
+    """Return one row per game with its final point difference (margin).
+
+    Collapses the two team rows per game from get_league_game_log into a
+    single row, keeping the winning side's positive margin. The `MARGIN`
+    column is therefore the absolute final point difference (>= 1; NBA games
+    cannot end tied). `seasons` may be a single season or a list of them.
+    """
+    if isinstance(seasons, (int, str)):
+        seasons = [seasons]
+
+    frames = []
+    for season in seasons:
+        games = get_league_game_log(season, season_type, refresh=refresh)
+        # One row per game: the winner's margin is the positive PLUS_MINUS.
+        margins = (
+            games.groupby("GAME_ID")
+            .agg(
+                GAME_DATE=("GAME_DATE", "first"),
+                SEASON=("SEASON", "first"),
+                MARGIN=("PLUS_MINUS", lambda s: int(s.abs().iloc[0])),
+            )
+            .reset_index()
+        )
+        frames.append(margins)
+
+    return pd.concat(frames, ignore_index=True).sort_values(
+        ["GAME_DATE", "GAME_ID"]
+    ).reset_index(drop=True)
